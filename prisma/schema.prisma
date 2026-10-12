@@ -1,18 +1,18 @@
 generator client {
   provider = "prisma-client-js"
 }
-  
+
 datasource db {
   provider = "mysql"
   url      = env("DATABASE_URL")
 }
-  
+
 enum Role {
   CLIENT
   MONTIR
   ADMIN
 }
-  
+
 enum OrderStatus {
   REQUESTED
   MATCHING
@@ -25,7 +25,7 @@ enum OrderStatus {
   COMPLETED
   CANCELLED
 }
-  
+
 enum PaymentStatus {
   PENDING
   PAID
@@ -33,14 +33,14 @@ enum PaymentStatus {
   EXPIRED
   REFUNDED
 }
-  
+
 enum PaymentMethod {
   QRIS
   GOPAY
   DANA
   BANK_TRANSFER
 }
-  
+
 enum ActivityType {
   LOGIN
   LOGOUT
@@ -57,86 +57,59 @@ enum ActivityType {
   PAYMENT
   RATING
 }
-  
-model Order {
-  id                 String        @id @default(uuid())
-  clientId           String
-  client             User          @relation("ClientOrders", references: [id])
-  montirId           String?
-  montir             User?         @relation("MontirOrders", references: [id])
-  vehicleId          String?
-  vehicle            Vehicle?      @relation("OrderVehicle", references: [id])
-  status             OrderStatus   @default(REQUESTED)
-  clientLat          Float
-  clientLng          Float
-  clientAddress      String        @db.Text
-  vehicleIssueDescription String        @db.Text
-  symptoms           String?       @db.Text
-  aiDiagnosisId      String?       // AI analysis result
-  aiDiagnosis        AiDiagnosis?  @relation("OrderAiDiagnosis", references: [id])
-  totalPrice         Decimal?      @db.Decimal(12, 2)
-  paymentStatus      PaymentStatus @default(PENDING)
-  paymentMethod      PaymentMethod?
-  qrCode             String?       // for QRIS payment
-  paymentId          String?       // Payment relation
-  payment            Payment?      @relation("OrderPayment", references: [id])
-  reviews            Review[]      @relation("OrderReviews")
-  statusHistory      ServiceRequestStatusHistory[]
-  
-  updatedAt          DateTime      @updatedAt
-}
-  
+
 model User {
-  id           String        @id @default(uuid())
+  id           String    @id @default(uuid())
   fullName     String
-  email        String        @unique
+  email        String    @unique
   password     String
   phoneNumber  String?
-  role         Role          @default(CLIENT)
-  avatarUrl    String?       @db.Text
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  
-  clientOrders Order[]       @relation("ClientOrders")
-  montirOrders Order[]       @relation("MontirOrders")
-  profile      Profile?      // defined on Profile side
-  mechanicDetail MechanicDetail?
-  earnings     Earnings[]
-  activityLogs ActivityLog[]
-  notifications Notification[]
-  reviewsGiven Review[]      @relation("ReviewClient")
+  role         Role      @default(CLIENT)
+  avatarUrl    String?   @db.Text
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  clientOrders           Order[]          @relation("ClientOrders")
+  montirOrders           Order[]          @relation("MontirOrders")
+  serviceRequestsAsClient ServiceRequest[] @relation("ServiceRequestClient")
+  serviceRequestsAsMontir ServiceRequest[] @relation("ServiceRequestMontir")
+  vehicles               Vehicle[]        @relation("UserVehicle")
+  profile                Profile?
+  mechanicDetail         MechanicDetail?
+  earnings               Earnings[]       @relation("MechanicEarnings")
+  activityLogs           ActivityLog[]    @relation("UserActivityLogs")
+  notifications          Notification[]   @relation("UserNotifications")
+  reviewsGiven           Review[]         @relation("ReviewClient")
+  reviewsReceived        Review[]         @relation("ReviewMontir")
 }
-  
+
 model Profile {
-  id           String        @id @default(uuid())
-  userId       String        @unique
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  phoneNumber  String?
-  address      String?
-  avatarUrl    String?       @db.Text
-  vehicles     Vehicle[]     @relation("VehicleOwner")
-  serviceRequests ServiceRequest[] @relation("ProfileServiceRequests")
-  activityLogs ActivityLog[] @relation("ProfileActivityLogs")
-  notifications Notification[] @relation("ProfileNotifications")
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phoneNumber String?
+  address     String?
+  avatarUrl   String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
-  
+
 model Vehicle {
-  id            String        @id @default(uuid())
-  ownerId       String
-  owner         User          @relation("UserVehicle", fields: [ownerId], references: [id], onDelete: Cascade)
-  type          String        // "motorcycle", "car", etc.
-  brand         String
-  model         String
-  year          Int?
-  licensePlate  String?
-  notes         String?       @db.Text
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  orders        Order[]      @relation("OrderVehicle")
+  id               String         @id @default(uuid())
+  ownerId          String
+  owner            User           @relation("UserVehicle", fields: [ownerId], references: [id], onDelete: Cascade)
+  type             String
+  brand            String
+  model            String
+  year             Int?
+  licensePlate     String?
+  notes            String?        @db.Text
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  orders           Order[]        @relation("OrderVehicle")
+  serviceRequests  ServiceRequest[] @relation("ServiceRequestVehicle")
 }
-  
+
 model MechanicDetail {
   id            String   @id @default(uuid())
   userId        String   @unique
@@ -146,141 +119,163 @@ model MechanicDetail {
   currentLng    Float?
   rating        Float    @default(5.0)
   totalEarnings Decimal  @default(0.0) @db.Decimal(12, 2)
-  specialization String?  // e.g., "electrical", "engine", "body"
-  status        String   @default("offline") // "online", "offline", "busy"
+  specialization String?
+  status        String   @default("offline")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
-  
+
+model Order {
+  id                        String        @id @default(uuid())
+  clientId                  String
+  client                    User          @relation("ClientOrders", fields: [clientId], references: [id], onDelete: Cascade)
+  montirId                  String?
+  montir                    User?         @relation("MontirOrders", fields: [montirId], references: [id], onDelete: SetNull)
+  vehicleId                 String?
+  vehicle                   Vehicle?      @relation("OrderVehicle", fields: [vehicleId], references: [id], onDelete: SetNull)
+  status                    OrderStatus   @default(REQUESTED)
+  clientLat                 Float
+  clientLng                 Float
+  clientAddress             String        @db.Text
+  vehicleIssueDescription   String        @db.Text
+  symptoms                  String?       @db.Text
+  totalPrice                Decimal?      @db.Decimal(12, 2)
+  paymentStatus             PaymentStatus @default(PENDING)
+  paymentMethod             PaymentMethod?
+  qrCode                    String?
+  createdAt                 DateTime      @default(now())
+  updatedAt                 DateTime      @updatedAt
+}
+
 model ServiceRequest {
-  id                String        @id @default(uuid())
-  clientId           String
-  client             User          @relation("ClientOrders", references: [id])
-  montirId           String?
-  montir             User?         @relation("MontirOrders", references: [id])
-  vehicleId          String?
-  vehicle            Vehicle?      @relation("ServiceRequestVehicle", references: [id])
-  status             OrderStatus   @default(REQUESTED)
-  clientLat          Float
-  clientLng          Float
-  clientAddress      String        @db.Text
-  vehicleIssueDescription String        @db.Text
-  symptoms           String?       @db.Text
-  aiDiagnosisId      String?       // AI analysis result
-  aiDiagnosis        AiDiagnosis?  @relation("ServiceRequestAiDiagnosis", references: [id])
-  totalPrice         Decimal?      @db.Decimal(12, 2)
-  paymentStatus      PaymentStatus @default(PENDING)
-  paymentMethod      PaymentMethod?
-  qrCode             String?       // for QRIS payment
-  paymentId          String?       // Payment relation
-  payment            Payment?      @relation("ServiceRequestPayment", references: [id])
-  createdAt          DateTime      @default(now())
-  acceptedAt         DateTime?
-  startedAt          DateTime?
-  completedAt        DateTime?
-  cancelledAt        DateTime?
-  reviews            Review[]      @relation("ServiceRequestReviews")
-  statusHistory      ServiceRequestStatusHistory[]
-  
-  updatedAt          DateTime      @updatedAt
+  id                        String        @id @default(uuid())
+  clientId                  String
+  client                    User          @relation("ServiceRequestClient", fields: [clientId], references: [id], onDelete: Cascade)
+  montirId                  String?
+  montir                    User?         @relation("ServiceRequestMontir", fields: [montirId], references: [id], onDelete: SetNull)
+  vehicleId                 String?
+  vehicle                   Vehicle?      @relation("ServiceRequestVehicle", fields: [vehicleId], references: [id], onDelete: SetNull)
+  status                    OrderStatus   @default(REQUESTED)
+  clientLat                 Float
+  clientLng                 Float
+  clientAddress             String        @db.Text
+  vehicleIssueDescription   String        @db.Text
+  symptoms                  String?       @db.Text
+  aiDiagnosis               AiDiagnosis?  @relation("ServiceRequestAiDiagnosis")
+  totalPrice                Decimal?      @db.Decimal(12, 2)
+  paymentStatus             PaymentStatus @default(PENDING)
+  paymentMethod             PaymentMethod?
+  qrCode                    String?
+  payment                   Payment?      @relation("ServiceRequestPayment")
+  createdAt                 DateTime      @default(now())
+  acceptedAt                DateTime?
+  startedAt                 DateTime?
+  completedAt               DateTime?
+  cancelledAt               DateTime?
+  reviews                   Review[]      @relation("ServiceRequestReviews")
+  statusHistory             ServiceRequestStatusHistory[] @relation("StatusHistory")
+  earnings                  Earnings[]    @relation("EarningsServiceRequest")
+  updatedAt                 DateTime      @updatedAt
 }
-  
+
 model AiDiagnosis {
-  id                String   @id @default(uuid())
-  serviceRequestId  String?       // optional, for standalone AI analysis
-  serviceRequest    ServiceRequest? @relation("ServiceRequestAiDiagnosis", references: [id])
-  possibleIssues    Json?     // structured AI response
-  symptoms          Json?     // recorded symptoms
-  riskLevel         String?   // "Low", "Medium", "High"
-  recommendedChecks Json?     // initial checks
-  suggestedTools    Json?     // suggested tools
-  estimatedComplexity String?  // "Simple", "Moderate", "Complex"
-  questionsForClient Json?     // questions to ask client
-  createdAt         DateTime @default(now())
+  id                  String          @id @default(uuid())
+  serviceRequestId    String?         @unique
+  serviceRequest      ServiceRequest? @relation("ServiceRequestAiDiagnosis", fields: [serviceRequestId], references: [id], onDelete: Cascade)
+  possibleIssues      Json?
+  symptoms            Json?
+  riskLevel           String?
+  recommendedChecks   Json?
+  suggestedTools      Json?
+  estimatedComplexity String?
+  questionsForClient  Json?
+  createdAt           DateTime        @default(now())
 }
-  
+
 model ServiceRequestStatusHistory {
-  id                String   @id @default(uuid())
-  serviceRequestId  String
-  serviceRequest    ServiceRequest @relation("StatusHistory", references: [id], onDelete: Cascade)
-  previousStatus    OrderStatus
-  newStatus         OrderStatus
-  changedAt         DateTime @default(now())
-  changedBy         String?
+  id               String        @id @default(uuid())
+  serviceRequestId String
+  serviceRequest   ServiceRequest @relation("StatusHistory", fields: [serviceRequestId], references: [id], onDelete: Cascade)
+  previousStatus   OrderStatus
+  newStatus        OrderStatus
+  changedAt        DateTime      @default(now())
+  changedBy        String?
 }
-  
+
 model Payment {
-  id                String   @id @default(uuid())
-  serviceRequestId  String      @unique
-  serviceRequest    ServiceRequest @relation("ServiceRequestPayment", references: [id], onDelete: Cascade)
-  amount            Decimal  @db.Decimal(12, 2)
-  paymentMethod     PaymentMethod
-  paymentGateway    String?   // midtrans, etc.
-  transactionId     String?   // gateway transaction ID
-  paymentStatus     PaymentStatus @default(PENDING)
-  qrCode            String?   // for QRIS
-  paidAt            DateTime?
-  expiredAt         DateTime?
-  createdAt         DateTime @default(now())
-  earningsId        String?     // related to earnings
-  earnings          Earnings?   @relation("PaymentEarnings", references: [id])
+  id               String        @id @default(uuid())
+  serviceRequestId String        @unique
+  serviceRequest   ServiceRequest @relation("ServiceRequestPayment", fields: [serviceRequestId], references: [id], onDelete: Cascade)
+  amount           Decimal       @db.Decimal(12, 2)
+  paymentMethod    PaymentMethod
+  paymentGateway   String?
+  transactionId    String?
+  paymentStatus    PaymentStatus @default(PENDING)
+  qrCode           String?
+  paidAt           DateTime?
+  expiredAt        DateTime?
+  createdAt        DateTime      @default(now())
+  events           PaymentEvent[] @relation("PaymentEvents")
+  earnings         Earnings[]    @relation("PaymentEarnings")
 }
-  
+
 model PaymentEvent {
-  id                String   @id @default(uuid())
-  paymentId         String
-  payment           Payment @relation("PaymentEvents", references: [id], onDelete: Cascade)
-  eventType         String   // "initiated", "success", "failed", "expired", "refunded"
-  description       String?
-  occurredAt        DateTime @default(now())
+  id          String   @id @default(uuid())
+  paymentId   String
+  payment     Payment  @relation("PaymentEvents", fields: [paymentId], references: [id], onDelete: Cascade)
+  eventType   String
+  description String?
+  occurredAt  DateTime @default(now())
 }
-  
+
 model Earnings {
-  id                String   @id @default(uuid())
-  mechanicId        String
-  mechanic          User     @relation("MechanicEarnings", fields: [mechanicId], references: [id], onDelete: Cascade)
-  serviceRequestId  String?
-  serviceRequest    ServiceRequest? @relation("EarningsServiceRequest", references: [id], onDelete: SetNull)
-  grossAmount       Decimal  @db.Decimal(12, 2)
-  platformFee       Decimal  @db.Decimal(12, 2)
-  netAmount         Decimal  @db.Decimal(12, 2)
-  period            String   // "today", "this_week", "this_month"
-  calculatedAt      DateTime @default(now())
+  id               String          @id @default(uuid())
+  mechanicId       String
+  mechanic         User            @relation("MechanicEarnings", fields: [mechanicId], references: [id], onDelete: Cascade)
+  serviceRequestId String?
+  serviceRequest   ServiceRequest? @relation("EarningsServiceRequest", fields: [serviceRequestId], references: [id], onDelete: SetNull)
+  paymentId        String?
+  payment          Payment?        @relation("PaymentEarnings", fields: [paymentId], references: [id], onDelete: SetNull)
+  grossAmount      Decimal         @db.Decimal(12, 2)
+  platformFee      Decimal         @db.Decimal(12, 2)
+  netAmount        Decimal         @db.Decimal(12, 2)
+  period           String
+  calculatedAt     DateTime        @default(now())
 }
-  
+
 model ActivityLog {
-  id                String   @id @default(uuid())
-  userId            String
-  user              User     @relation("UserActivityLogs", fields: [userId], references: [id], onDelete: Cascade)
-  activityType      ActivityType
-  description       String?
-  relatedEntity     String?  // e.g., "order_id", "mechanic_id"
-  relatedId         String?
-  timestamp         DateTime @default(now())
+  id            String       @id @default(uuid())
+  userId        String
+  user          User         @relation("UserActivityLogs", fields: [userId], references: [id], onDelete: Cascade)
+  activityType  ActivityType
+  description   String?
+  relatedEntity String?
+  relatedId     String?
+  timestamp     DateTime     @default(now())
 }
-  
+
 model Notification {
-  id                String   @id @default(uuid())
-  userId            String
-  user              User     @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
-  title             String
-  message           String
-  type              String   // "info", "warning", "success", "error"
-  relatedEntity     String?  // e.g., "order", "payment"
-  relatedId         String?
-  isRead            Boolean  @default(false)
-  createdAt         DateTime @default(now())
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+  title         String
+  message       String
+  type          String
+  relatedEntity String?
+  relatedId     String?
+  isRead        Boolean  @default(false)
+  createdAt     DateTime @default(now())
 }
-  
+
 model Review {
-  id                String   @id @default(uuid())
-  serviceRequestId  String
-  serviceRequest    ServiceRequest @relation("ServiceRequestReviews", references: [id], onDelete: Cascade)
-  clientId          String
-  client            User     @relation("ReviewClient", references: [id], onDelete: Cascade)
-  montirId          String?
-  montir            User?     @relation("ReviewMontir", references: [id], onDelete: SetNull)
-  rating            Int      // 1-5
-  comment           String?   @db.Text
-  createdAt         DateTime @default(now())
+  id               String         @id @default(uuid())
+  serviceRequestId String
+  serviceRequest   ServiceRequest @relation("ServiceRequestReviews", fields: [serviceRequestId], references: [id], onDelete: Cascade)
+  clientId         String
+  client           User           @relation("ReviewClient", fields: [clientId], references: [id], onDelete: Cascade)
+  montirId         String?
+  montir           User?          @relation("ReviewMontir", fields: [montirId], references: [id], onDelete: SetNull)
+  rating           Int
+  comment          String?        @db.Text
+  createdAt        DateTime       @default(now())
 }
